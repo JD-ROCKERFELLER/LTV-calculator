@@ -1,0 +1,64 @@
+import pandas as pd
+import sqlalchemy
+from sklearn.ensemble import Random ForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, confusion_matrix
+
+def fetch_data():
+    engine = sqlalchemy.create_engine('sqlite:///home_loan_data.db')
+    query = """
+    SELECT applicants.id, applicants.income, applicants.credit_score, properties.property_value, loans.loan_amount
+    FROM applicants
+    JOIN properties ON applicants.id = properties.applicant_id
+    JOIN loans ON applicants.id = loans.applicant_id
+    """
+    df = pd.read_sql(query, engine)
+    return df
+
+def calculate_ltv(data):
+    data['ltv_ratio'] = data['loan_amount'] / data['property_value']
+    data['risk_factor'] = (data['ltv_ratio'] > 0.8).astype(int)
+    return data
+
+def build_predictive_model(data):
+    X = data[['income', 'credit_score', 'ltv_ratio']]
+    y = data['risk_factor']
+    
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    
+    y_pred = model.predict(X_test)
+    
+    accuracy = accuracy_score(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
+    
+    print(f"Model Accuracy: {accuracy}")
+    print(f"Confusion Matrix:\n{cm}")
+    
+    return model
+
+def generate_report(data, model):
+    X = data[['income', 'credit_score', 'ltv_ratio']]
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    data['predicted_risk_factor'] = model.predict(X)
+    
+    high_risk_count = sum(data['predicted_risk_factor'] == 1)
+    low_risk_count = len(data) - high_risk_count
+    
+    print(f"High Risk Loans: {high_risk_count}")
+    print(f"Low Risk Loans: {low_risk_count}")
+    
+    return data
+
+if __name__ == "__main__":
+    data = fetch_data()
+    data = calculate_ltv(data)
+    model = build_predictive_model(data)
+    final_data = generate_report(data, model)
